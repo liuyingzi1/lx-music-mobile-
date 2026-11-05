@@ -14,21 +14,16 @@ import Mylist from '@/screens/Home/Views/Mylist'
 import Leaderboard from '@/screens/Home/Views/Leaderboard'
 import Setting from '@/screens/Home/Views/Setting'
 import { setNavActiveId } from '@/core/common'
+import { useStatusbarHeight } from '@/store/common/hook'
 
 import Feed from './Feed'
 
 /**
- * 新首页外壳（真·内嵌，不是 push 旧首页）
+ * 新首页外壳（内嵌洛雪真实页面）
  *
- * 直接把洛雪 Home 里的 5 个真实页面组件挂进来：
- *   Search / SongList / Mylist / Leaderboard / Setting
- * 它们都是无 props 的整页组件，所以可以像积木一样塞进任意容器。
- *
- * Tab 结构：
- *   首页  → 刷歌 Feed
- *   发现  → 榜单 / 歌单（分段切换）
- *   我的  → 我的音乐 / 设置（分段切换）
- *   顶部右上角「搜索」→ 全屏盖一层 Search
+ * 关键点：这 5 个页面原本都排在 Home 的 Header 下面，
+ * Header 自己加了 paddingTop = 状态栏高度。单独拎出来后必须自己补这个内边距，
+ * 否则搜索框会钻到状态栏底下、标题会和顶部控件重叠。
  */
 
 const TABS = [
@@ -47,13 +42,17 @@ export default memo(() => {
   const [mineSub, setMineSub] = useState<'music' | 'setting'>('music')
   const [searchOpen, setSearchOpen] = useState(false)
   const { width } = useWindowDimensions()
+  const statusBarHeight = useStatusbarHeight()
 
-  // 这几个页面内部会读 commonState.navActiveId 做判断，切 Tab 时同步一下
+  const syncNav = useCallback((next: TabKey, dSub: 'top' | 'songlist', mSub: 'music' | 'setting') => {
+    if (next === 'discover') setNavActiveId(dSub === 'top' ? 'nav_top' : 'nav_songlist')
+    else if (next === 'mine') setNavActiveId(mSub === 'music' ? 'nav_love' : 'nav_setting')
+  }, [])
+
   const switchTab = useCallback((next: TabKey) => {
     setTab(next)
-    if (next === 'discover') setNavActiveId(discoverSub === 'top' ? 'nav_top' : 'nav_songlist')
-    else if (next === 'mine') setNavActiveId(mineSub === 'music' ? 'nav_love' : 'nav_setting')
-  }, [discoverSub, mineSub])
+    syncNav(next, discoverSub, mineSub)
+  }, [discoverSub, mineSub, syncNav])
 
   const switchDiscoverSub = useCallback((next: 'top' | 'songlist') => {
     setDiscoverSub(next)
@@ -72,11 +71,10 @@ export default memo(() => {
 
   const closeSearch = useCallback(() => {
     setSearchOpen(false)
-    if (tab === 'discover') setNavActiveId(discoverSub === 'top' ? 'nav_top' : 'nav_songlist')
-    else if (tab === 'mine') setNavActiveId(mineSub === 'music' ? 'nav_love' : 'nav_setting')
-  }, [discoverSub, mineSub, tab])
+    syncNav(tab, discoverSub, mineSub)
+  }, [discoverSub, mineSub, syncNav, tab])
 
-  // 页面只创建一次，避免每次切换都重新拉数据
+  // 页面只创建一次，避免切换 Tab 时重新拉数据
   const searchPage = useMemo(() => <Search />, [])
   const leaderboardPage = useMemo(() => <Leaderboard />, [])
   const songlistPage = useMemo(() => <SongList />, [])
@@ -89,8 +87,36 @@ export default memo(() => {
 
       <View style={styles.content}>
         {tab === 'feed' ? <Feed bottomInset={TAB_BAR_HEIGHT} /> : null}
-        {tab === 'discover' ? (discoverSub === 'top' ? leaderboardPage : songlistPage) : null}
-        {tab === 'mine' ? (mineSub === 'music' ? mylistPage : settingPage) : null}
+
+        {tab === 'discover'
+          ? (
+            <View style={[styles.page, { paddingTop: statusBarHeight }]}>
+              <Segment
+                items={[{ key: 'top', label: '榜单' }, { key: 'songlist', label: '歌单' }]}
+                value={discoverSub}
+                onChange={(v) => { switchDiscoverSub(v as 'top' | 'songlist') }}
+              />
+              <View style={styles.pageBody}>
+                {discoverSub === 'top' ? leaderboardPage : songlistPage}
+              </View>
+            </View>
+            )
+          : null}
+
+        {tab === 'mine'
+          ? (
+            <View style={[styles.page, { paddingTop: statusBarHeight }]}>
+              <Segment
+                items={[{ key: 'music', label: '我的音乐' }, { key: 'setting', label: '设置' }]}
+                value={mineSub}
+                onChange={(v) => { switchMineSub(v as 'music' | 'setting') }}
+              />
+              <View style={styles.pageBody}>
+                {mineSub === 'music' ? mylistPage : settingPage}
+              </View>
+            </View>
+            )
+          : null}
       </View>
 
       {/* 首页右上角搜索 */}
@@ -99,32 +125,6 @@ export default memo(() => {
           <TouchableOpacity style={styles.searchBtn} activeOpacity={0.75} onPress={openSearch}>
             <Text style={styles.searchText}>搜索</Text>
           </TouchableOpacity>
-          )
-        : null}
-
-      {/* 发现：二级切换 */}
-      {tab === 'discover'
-        ? (
-          <View style={styles.segmentWrap}>
-            <Segment
-              items={[{ key: 'top', label: '榜单' }, { key: 'songlist', label: '歌单' }]}
-              value={discoverSub}
-              onChange={(v) => { switchDiscoverSub(v as 'top' | 'songlist') }}
-            />
-          </View>
-          )
-        : null}
-
-      {/* 我的：二级切换 */}
-      {tab === 'mine'
-        ? (
-          <View style={styles.segmentWrap}>
-            <Segment
-              items={[{ key: 'music', label: '我的音乐' }, { key: 'setting', label: '设置' }]}
-              value={mineSub}
-              onChange={(v) => { switchMineSub(v as 'music' | 'setting') }}
-            />
-          </View>
           )
         : null}
 
@@ -146,10 +146,10 @@ export default memo(() => {
         })}
       </View>
 
-      {/* 搜索全屏浮层 */}
+      {/* 搜索全屏浮层（补状态栏内边距，否则搜索框会被状态栏挡住） */}
       {searchOpen
         ? (
-          <View style={[styles.overlay, { width }]}>
+          <View style={[styles.overlay, { width, paddingTop: statusBarHeight }]}>
             {searchPage}
             <TouchableOpacity style={styles.backBtn} activeOpacity={0.8} onPress={closeSearch}>
               <Text style={styles.backText}>返回</Text>
@@ -166,20 +166,22 @@ const Segment = ({ items, value, onChange }: {
   value: string
   onChange: (key: string) => void
 }) => (
-  <View style={styles.segment}>
-    {items.map(item => {
-      const active = item.key === value
-      return (
-        <TouchableOpacity
-          key={item.key}
-          style={[styles.segmentItem, active && styles.segmentItemActive]}
-          activeOpacity={0.8}
-          onPress={() => { onChange(item.key) }}
-        >
-          <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{item.label}</Text>
-        </TouchableOpacity>
-      )
-    })}
+  <View style={styles.segmentWrap}>
+    <View style={styles.segment}>
+      {items.map(item => {
+        const active = item.key === value
+        return (
+          <TouchableOpacity
+            key={item.key}
+            style={[styles.segmentItem, active && styles.segmentItemActive]}
+            activeOpacity={0.8}
+            onPress={() => { onChange(item.key) }}
+          >
+            <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{item.label}</Text>
+          </TouchableOpacity>
+        )
+      })}
+    </View>
   </View>
 )
 
@@ -189,6 +191,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#0A0A0C',
   },
   content: {
+    flex: 1,
+  },
+  page: {
+    flex: 1,
+  },
+  pageBody: {
     flex: 1,
   },
   searchBtn: {
@@ -207,10 +215,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   segmentWrap: {
-    position: 'absolute',
-    top: 44,
-    left: 0,
-    right: 0,
+    paddingTop: 8,
+    paddingBottom: 8,
     alignItems: 'center',
   },
   segment: {
