@@ -1,6 +1,7 @@
 // @flow
 
 import { Navigation } from 'react-native-navigation'
+import { GestureHandlerRootView } from 'react-native-gesture-handler'
 
 import {
   Home,
@@ -28,11 +29,17 @@ import SyncModeModal from './components/SyncModeModal'
 function WrappedComponent(Component: any) {
   return function inject(props: Record<string, any>) {
     const EnhancedComponent = () => (
-      <Provider>
-        <Component
-          {...props}
-        />
-      </Provider>
+      // ★ 相对原版唯一改动：每个屏幕外面包一层 GestureHandlerRootView
+      // react-native-navigation 的屏幕不是挂在 App 根节点下的，
+      // 所以不能像 react-navigation 那样只在 App.tsx 包一次。
+      // 在这里包是"一次改全量"的最省事做法。
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <Provider>
+          <Component
+            {...props}
+          />
+        </Provider>
+      </GestureHandlerRootView>
     )
 
     return <EnhancedComponent />

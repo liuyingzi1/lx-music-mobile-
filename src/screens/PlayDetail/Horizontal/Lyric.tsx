@@ -1,82 +1,33 @@
-import { memo, useMemo, useEffect, useRef, useCallback } from 'react'
+import { useMemo, useEffect, useRef, useCallback } from 'react'
 import { View, FlatList, type FlatListProps, type NativeSyntheticEvent, type NativeScrollEvent, type LayoutChangeEvent } from 'react-native'
-// import { useLayout } from '@/utils/hooks'
 import { type Line, useLrcPlay, useLrcSet } from '@/plugins/lyric'
 import { createStyle } from '@/utils/tools'
-// import { useComponentIds } from '@/store/common/hook'
-import { useTheme } from '@/store/theme/hook'
 import { useSettingValue } from '@/store/setting/hook'
-import { AnimatedColorText } from '@/components/common/Text'
-import { setSpText } from '@/utils/pixelRatio'
 import playerState from '@/store/player/state'
 import { scrollTo } from '@/utils/scroll'
 import PlayLine, { type PlayLineType } from '../components/PlayLine'
-// import { screenkeepAwake } from '@/utils/nativeModules/utils'
-// import { log } from '@/utils/log'
-// import { toast } from '@/utils/tools'
+import KaraokeLine from './KaraokeLine'
+import { parseWordLyric, type WordLine } from '@/utils/lyric/wordLyric'
+import { usePlayerMusicInfo } from '@/store/player/hook'
+
+/**
+ * 横屏歌词列表（逐字高亮版）
+ *
+ * 相对原版 Lyric.tsx 只改了两处：
+ *   1. 行渲染器 LrcLine → KaraokeLine（逐字擦除 + 发光）
+ *   2. 增加 wordMap：把原始歌词里可能存在的字级时间（增强型 LRC）索引出来
+ *
+ * 滚动跟随 / 拖动定位 / PlayLine 的接口全部保持原样，行为不变。
+ */
 
 type FlatListType = FlatListProps<Line>
 
-interface LineProps {
-  line: Line
-  lineNum: number
-  activeLine: number
-  onLayout: (lineNum: number, height: number, width: number) => void
-}
-const LrcLine = memo(({ line, lineNum, activeLine, onLayout }: LineProps) => {
-  const theme = useTheme()
-  const lrcFontSize = useSettingValue('playDetail.horizontal.style.lrcFontSize')
-  const textAlign = useSettingValue('playDetail.style.align')
-  const size = lrcFontSize / 10
-  const lineHeight = setSpText(size) * 1.3
-
-  const colors = useMemo(() => {
-    const active = activeLine == lineNum
-    return active ? [
-      theme['c-primary'],
-      theme['c-primary-alpha-200'],
-      1,
-    ] as const : [
-      theme['c-350'],
-      theme['c-300'],
-      0.6,
-    ] as const
-  }, [activeLine, lineNum, theme])
-
-  const handleLayout = ({ nativeEvent }: LayoutChangeEvent) => {
-    onLayout(lineNum, nativeEvent.layout.height, nativeEvent.layout.width)
-  }
-
-  // textBreakStrategy="simple" 用于解决某些设备上字体被截断的问题
-  // https://stackoverflow.com/a/72822360
-  return (
-    <View style={styles.line} onLayout={handleLayout}>
-      <AnimatedColorText style={{
-        ...styles.lineText,
-        textAlign,
-        lineHeight,
-      }} textBreakStrategy="simple" color={colors[0]} opacity={colors[2]} size={size}>{line.text}</AnimatedColorText>
-      {
-        line.extendedLyrics.map((lrc, index) => {
-          return (<AnimatedColorText style={{
-            ...styles.lineTranslationText,
-            textAlign,
-            lineHeight: lineHeight * 0.8,
-          }} textBreakStrategy="simple" key={index} color={colors[1]} opacity={colors[2]} size={size * 0.8}>{lrc}</AnimatedColorText>)
-        })
-      }
-    </View>
-  )
-}, (prevProps, nextProps) => {
-  return prevProps.line === nextProps.line &&
-    prevProps.activeLine != nextProps.lineNum &&
-    nextProps.activeLine != nextProps.lineNum
-})
 const wait = async() => new Promise(resolve => setTimeout(resolve, 100))
 
 export default () => {
   const lyricLines = useLrcSet()
   const { line } = useLrcPlay()
+  const musicInfo = usePlayerMusicInfo()
   const flatListRef = useRef<FlatList>(null)
   const playLineRef = useRef<PlayLineType>(null)
   const isPauseScrollRef = useRef(true)
@@ -88,23 +39,24 @@ export default () => {
   const listLayoutInfoRef = useRef<{ spaceHeight: number, lineHeights: number[] }>({ spaceHeight: 0, lineHeights: [] })
   const scrollCancelRef = useRef<(() => void) | null>(null)
   const isShowLyricProgressSetting = useSettingValue('playDetail.isShowLyricProgressSetting')
-  // useLock()
-  // const [imgUrl, setImgUrl] = useState(null)
-  // const theme = useGetter('common', 'theme')
-  // const { onLayout, ...layout } = useLayout()
 
-  // useEffect(() => {
-  //   const url = playMusicInfo ? playMusicInfo.musicInfo.img : null
-  //   if (imgUrl == url) return
-  //   setImgUrl(url)
-  // // eslint-disable-next-line react-hooks/exhaustive-deps
-  // }, [playMusicInfo])
+  /**
+   * 时间 → 字级时间戳 的索引。
+   * 洛雪把原始歌词文本放在 musicInfo.lrc；如果音源给的是增强型 LRC（带 <mm:ss.xx>），
+   * 这里就能拿到真正的逐字时间。拿不到就返回 null，KaraokeLine 自动走估算模式。
+   * 想接 YRC（网易云逐字）时，把 parseWordLyric 的参数换成你请求到的 yrc 字符串即可。
+   */
+  const wordMap = useMemo(() => {
+    const parsed = parseWordLyric(musicInfo.lrc)
+    if (!parsed) return null
+    const map = new Map<number, WordLine>()
+    for (const item of parsed) map.set(item.time, item)
+    return map
+  }, [musicInfo.lrc])
 
-  // const imgWidth = useMemo(() => layout.width * 0.75, [layout.width])
   const handleScrollToActive = (index = lineRef.current.line) => {
     if (index < 0) return
     if (flatListRef.current) {
-      // console.log('handleScrollToActive', index)
       if (scrollInfoRef.current && lineRef.current.line - lineRef.current.prevLine == 1) {
         let offset = listLayoutInfoRef.current.spaceHeight
         for (let line = 0; line < index; line++) {
@@ -167,7 +119,6 @@ export default () => {
     }, 3000)
   }
 
-
   useEffect(() => {
     return () => {
       if (delayScrollTimeout.current) {
@@ -182,7 +133,6 @@ export default () => {
   }, [])
 
   useEffect(() => {
-    // linesRef.current = lyricLines
     listLayoutInfoRef.current.lineHeights = []
     lineRef.current.prevLine = 0
     lineRef.current.line = 0
@@ -242,7 +192,7 @@ export default () => {
     })
   }
 
-  const handleLineLayout = useCallback<LineProps['onLayout']>((lineNum, height) => {
+  const handleLineLayout = useCallback((lineNum: number, height: number) => {
     listLayoutInfoRef.current.lineHeights[lineNum] = height
     playLineRef.current?.updateLayoutInfo(listLayoutInfoRef.current)
   }, [])
@@ -259,7 +209,14 @@ export default () => {
 
   const renderItem: FlatListType['renderItem'] = ({ item, index }) => {
     return (
-      <LrcLine line={item} lineNum={index} activeLine={line} onLayout={handleLineLayout} />
+      <KaraokeLine
+        line={item}
+        lineNum={index}
+        activeLine={line}
+        nextTime={lyricLines[index + 1]?.time ?? item.time + 3000}
+        onLayout={handleLineLayout}
+        words={wordMap?.get(item.time)?.words}
+      />
     )
   }
   const getkey: FlatListType['keyExtractor'] = (item, index) => `${index}${item.text}`
@@ -296,29 +253,8 @@ const styles = createStyle({
     flex: 1,
     paddingLeft: 20,
     paddingRight: 20,
-    // backgroundColor: 'rgba(0,0,0,0.1)',
   },
   space: {
     paddingTop: '100%',
-  },
-  line: {
-    paddingTop: 10,
-    paddingBottom: 10,
-    // opacity: 0,
-  },
-  lineText: {
-    textAlign: 'center',
-    // fontSize: 16,
-    // lineHeight: 20,
-    // paddingTop: 5,
-    // paddingBottom: 5,
-    // opacity: 0,
-  },
-  lineTranslationText: {
-    textAlign: 'center',
-    // fontSize: 13,
-    // lineHeight: 17,
-    paddingTop: 5,
-    // paddingBottom: 5,
   },
 })
