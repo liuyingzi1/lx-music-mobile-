@@ -6,7 +6,8 @@ import Image from '@/components/common/Image'
 import Text from '@/components/common/Text'
 import { Icon } from '@/components/common/Icon'
 import { useIsPlay, usePlayerMusicInfo, useProgress } from '@/store/player/hook'
-import { playNext, playPrev, togglePlay } from '@/core/player/player'
+import { togglePlay } from '@/core/player/player'
+import { playNextInList, playPrevInList } from './playInList'
 import { getKaraokeTime } from '@/utils/lyric/playClock'
 import { cycleImmersiveTheme, useImmersiveTheme } from './theme'
 
@@ -105,13 +106,13 @@ export default memo(({ onToggleStyle }: { onToggleStyle?: () => void }) => {
       </View>
 
       <View style={styles.btns}>
-        <TouchableOpacity style={styles.btn} activeOpacity={0.5} onPress={() => { void playPrev() }}>
+        <TouchableOpacity style={styles.btn} activeOpacity={0.5} onPress={playPrevInList}>
           <Icon name="prevMusic" color="#FFFFFF" rawSize={16} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.btn} activeOpacity={0.5} onPress={togglePlay}>
           <Icon name={isPlay ? 'pause' : 'play'} color={theme.primary} rawSize={18} />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.btn} activeOpacity={0.5} onPress={() => { void playNext() }}>
+        <TouchableOpacity style={styles.btn} activeOpacity={0.5} onPress={playNextInList}>
           <Icon name="nextMusic" color="#FFFFFF" rawSize={16} />
         </TouchableOpacity>
         <TouchableOpacity style={styles.styleBtn} activeOpacity={0.6} onPress={onToggleStyle}>

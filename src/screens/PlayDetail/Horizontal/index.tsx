@@ -20,7 +20,7 @@ import { COMPONENT_IDS } from '@/config/constant'
 import commonState, { type InitState as CommonState } from '@/store/common/state'
 import { useStatusbarHeight } from '@/store/common/hook'
 import { pop } from '@/navigation'
-import { playNext, playPrev } from '@/core/player/player'
+import { playNextInList, playPrevInList } from './playInList'
 
 import Header from './components/Header'
 import Lyric from './Lyric'
@@ -146,7 +146,7 @@ export default memo(({ componentId }: { componentId: string }) => {
       easing: Easing.in(Easing.cubic),
       useNativeDriver: true,
     }).start(() => {
-      void (dir === 1 ? playNext() : playPrev())
+      void (dir === 1 ? playNextInList() : playPrevInList())
       switchAnim.setValue(dir)
       Animated.spring(switchAnim, {
         toValue: 0,

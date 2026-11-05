@@ -16,7 +16,7 @@ import Text from '@/components/common/Text'
 import commonState, { type InitState as CommonState } from '@/store/common/state'
 import { useStatusbarHeight } from '@/store/common/hook'
 import { useIsPlay, usePlayerMusicInfo } from '@/store/player/hook'
-import { playNext, playPrev } from '@/core/player/player'
+import { playNextInList, playPrevInList } from '../Horizontal/playInList'
 
 import Header from './components/Header'
 import Lyric from '../Horizontal/Lyric'
@@ -146,7 +146,7 @@ export default memo(({ componentId }: { componentId?: string }) => {
       easing: Easing.in(Easing.cubic),
       useNativeDriver: true,
     }).start(() => {
-      void (dir === 1 ? playNext() : playPrev())
+      void (dir === 1 ? playNextInList() : playPrevInList())
       switchAnim.setValue(dir)
       Animated.spring(switchAnim, { toValue: 0, friction: 8, tension: 55, useNativeDriver: true })
         .start(() => { switchingRef.current = false })
