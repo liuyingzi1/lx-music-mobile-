@@ -2,29 +2,21 @@ import { memo, useEffect, useRef } from 'react'
 import { Animated, Easing, StyleSheet, View } from 'react-native'
 
 import { useIsPlay, usePlayerMusicInfo } from '@/store/player/hook'
-import { useTheme } from '@/store/theme/hook'
+import { useImmersiveTheme } from './theme'
 
 /**
- * 沉浸式动态背景
+ * 沉浸式动态背景（v2）
  *
- * 设计要点（为什么不用 @react-native-community/blur 作为默认方案）：
- * 1. RN 自带的 <Image blurRadius> 在 iOS / Android 都是原生高斯模糊，零新增原生依赖；
- * 2. @react-native-community/blur 的 Android 端在 API 31+ 上依赖被废弃的 RenderScript，
- *    经常出现「一片黑 / 不模糊 / 掉帧」，做全屏背景风险很高，更适合做小面积的毛玻璃面板。
+ * 与 v1 的差别：呼吸薄纱的颜色改成跟随「沉浸式主题」，不再跟 App 主题走，
+ * 这样切主题时整屏色调会一起变（极光=青、落日=橙、星云=紫、极简=灰白）。
  *
- * 如果你仍然想用 BlurView，把 <Animated.Image> 换成：
- *   <BlurView style={StyleSheet.absoluteFill} blurType="dark" blurAmount={25} reducedTransparencyFallbackColor="black" />
- * 并注意：Android 上 blurAmount 会被 clamp 到 25，且需要 API 21+。
- *
- * 动画层：
- *   - 底层：模糊封面，缓慢 Ken-Burns 缩放（20s 一个来回）
- *   - 中层：主题色「呼吸」薄纱，6s 一呼一吸（歌曲暂停时降低幅度）
- *   - 上层：底部渐隐 + 顶部渐隐，保证控件与歌词的可读性
+ * 模糊用 RN 自带的 <Image blurRadius>，不引 @react-native-community/blur：
+ * 那个库在 Android 12+ 依赖已废弃的 RenderScript，全屏背景上很容易一片黑。
  */
 export default memo(() => {
   const musicInfo = usePlayerMusicInfo()
   const isPlay = useIsPlay()
-  const theme = useTheme()
+  const theme = useImmersiveTheme()
 
   const zoom = useRef(new Animated.Value(0)).current
   const breath = useRef(new Animated.Value(0)).current
@@ -51,7 +43,7 @@ export default memo(() => {
     return () => { loop.stop() }
   }, [zoom])
 
-  // 呼吸渐变：播放时幅度大，暂停时收敛（像呼吸变浅）
+  // 呼吸渐变：播放时幅度大，暂停时收敛
   useEffect(() => {
     const duration = isPlay ? 5200 : 9000
     const loop = Animated.loop(
@@ -76,24 +68,19 @@ export default memo(() => {
 
   const scale = zoom.interpolate({ inputRange: [0, 1], outputRange: [1.22, 1.38] })
 
-  // 呼吸薄纱的透明度：暂停时压到很低的区间
   const veilOpacity = breath.interpolate({
     inputRange: [0, 1],
-    outputRange: isPlay ? [0.03, 0.14] : [0.02, 0.06],
+    outputRange: isPlay ? [0.05, 0.18] : [0.03, 0.09],
   })
-
-  // 呼吸薄纱的缩放：产生"光晕扩散"的错觉
   const veilScale = breath.interpolate({ inputRange: [0, 1], outputRange: [1, 1.12] })
 
   return (
     <View style={styles.root} pointerEvents="none">
       <View style={[StyleSheet.absoluteFill, { backgroundColor: '#000' }]} />
 
-      {/* 1. 模糊封面（RN 原生高斯模糊，双平台可用） */}
       {musicInfo.pic
         ? (
           <Animated.Image
-            // Android 上 blurRadius > 25 会被截断，25 已经足够"糊"
             blurRadius={25}
             fadeDuration={380}
             resizeMode="cover"
@@ -103,24 +90,23 @@ export default memo(() => {
           )
         : null}
 
-      {/* 2. 压暗，保证前景可读 */}
+      {/* 压暗，保证白色歌词可读 */}
       <View style={[StyleSheet.absoluteFill, styles.scrim]} />
 
-      {/* 3. 主题色呼吸光晕（整屏纯色 + 极低透明度，没有硬边缘） */}
+      {/* 主题色呼吸光晕 */}
       <Animated.View
         style={[
           StyleSheet.absoluteFill,
           {
-            backgroundColor: theme['c-primary'],
+            backgroundColor: theme.veil,
             opacity: veilOpacity,
             transform: [{ scale: veilScale }],
           },
         ]}
       />
 
-      {/* 4. 上下渐隐，模拟线性渐变（不引入 react-native-linear-gradient 也能用） */}
       <FadeEdge from="top" color="rgba(0,0,0,0.55)" />
-      <FadeEdge from="bottom" color="rgba(0,0,0,0.72)" />
+      <FadeEdge from="bottom" color="rgba(0,0,0,0.78)" />
     </View>
   )
 })
@@ -155,7 +141,7 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   scrim: {
-    backgroundColor: 'rgba(0,0,0,0.42)',
+    backgroundColor: 'rgba(0,0,0,0.5)',
   },
   edge: {
     position: 'absolute',

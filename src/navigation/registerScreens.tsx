@@ -10,6 +10,7 @@ import {
   Comment,
   // Setting,
 } from '@/screens'
+import Hub from '@/screens/Hub'
 import { Provider } from '@/store/Provider'
 
 import {
@@ -26,13 +27,17 @@ import VersionModal from './components/VersionModal'
 import PactModal from './components/PactModal'
 import SyncModeModal from './components/SyncModeModal'
 
+/**
+ * ★ 新首页开关
+ *   true  = 启动直接进新首页（底部导航 + 刷歌）
+ *   false = 回到洛雪原来的首页
+ * 改这一行 + 重新构建即可来回切换。
+ */
+const USE_NEW_HOME = true
+
 function WrappedComponent(Component: any) {
   return function inject(props: Record<string, any>) {
     const EnhancedComponent = () => (
-      // ★ 相对原版唯一改动：每个屏幕外面包一层 GestureHandlerRootView
-      // react-native-navigation 的屏幕不是挂在 App 根节点下的，
-      // 所以不能像 react-navigation 那样只在 App.tsx 包一次。
-      // 在这里包是"一次改全量"的最省事做法。
       <GestureHandlerRootView style={{ flex: 1 }}>
         <Provider>
           <Component
@@ -47,7 +52,8 @@ function WrappedComponent(Component: any) {
 }
 
 export default () => {
-  Navigation.registerComponent(HOME_SCREEN, () => WrappedComponent(Home))
+  Navigation.registerComponent(HOME_SCREEN, () => WrappedComponent(USE_NEW_HOME ? Hub : Home))
+  Navigation.registerComponent('Hub', () => WrappedComponent(Hub))
   Navigation.registerComponent(PLAY_DETAIL_SCREEN, () => WrappedComponent(PlayDetail))
   Navigation.registerComponent(SONGLIST_DETAIL_SCREEN, () => WrappedComponent(SonglistDetail))
   Navigation.registerComponent(COMMENT_SCREEN, () => WrappedComponent(Comment))

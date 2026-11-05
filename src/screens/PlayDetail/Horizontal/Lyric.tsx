@@ -1,7 +1,6 @@
 import { useMemo, useEffect, useRef, useCallback } from 'react'
 import { View, FlatList, type FlatListProps, type NativeSyntheticEvent, type NativeScrollEvent, type LayoutChangeEvent } from 'react-native'
 import { type Line, useLrcPlay, useLrcSet } from '@/plugins/lyric'
-import { createStyle } from '@/utils/tools'
 import { useSettingValue } from '@/store/setting/hook'
 import playerState from '@/store/player/state'
 import { scrollTo } from '@/utils/scroll'
@@ -9,25 +8,29 @@ import PlayLine, { type PlayLineType } from '../components/PlayLine'
 import KaraokeLine from './KaraokeLine'
 import { parseWordLyric, type WordLine } from '@/utils/lyric/wordLyric'
 import { usePlayerMusicInfo } from '@/store/player/hook'
+import { useImmersiveTheme, useLyricStyle } from './theme'
 
 /**
- * 横屏歌词列表（逐字高亮版）
+ * 横屏歌词列表（v3）
  *
- * 相对原版 Lyric.tsx 只改了两处：
- *   1. 行渲染器 LrcLine → KaraokeLine（逐字擦除 + 发光）
- *   2. 增加 wordMap：把原始歌词里可能存在的字级时间（增强型 LRC）索引出来
+ * 相对上一版：排版由「歌词样式」驱动（theme.ts 里的 LYRIC_STYLES）
+ *   - fullScreen / fontScale / 对齐 全部交给样式决定
+ *   - visibleRange 控制只显示当前行前后 N 行（聚焦、镜台）
  *
- * 滚动跟随 / 拖动定位 / PlayLine 的接口全部保持原样，行为不变。
+ * 滚动跟随、拖动定位、PlayLine 的接口保持原样。
  */
 
 type FlatListType = FlatListProps<Line>
 
 const wait = async() => new Promise(resolve => setTimeout(resolve, 100))
 
-export default () => {
+export default ({ padTop, padH }: { padTop?: string, padH?: string } = {}) => {
   const lyricLines = useLrcSet()
   const { line } = useLrcPlay()
   const musicInfo = usePlayerMusicInfo()
+  const theme = useImmersiveTheme()
+  const style = useLyricStyle()
+
   const flatListRef = useRef<FlatList>(null)
   const playLineRef = useRef<PlayLineType>(null)
   const isPauseScrollRef = useRef(true)
@@ -44,7 +47,6 @@ export default () => {
    * 时间 → 字级时间戳 的索引。
    * 洛雪把原始歌词文本放在 musicInfo.lrc；如果音源给的是增强型 LRC（带 <mm:ss.xx>），
    * 这里就能拿到真正的逐字时间。拿不到就返回 null，KaraokeLine 自动走估算模式。
-   * 想接 YRC（网易云逐字）时，把 parseWordLyric 的参数换成你请求到的 yrc 字符串即可。
    */
   const wordMap = useMemo(() => {
     const parsed = parseWordLyric(musicInfo.lrc)
@@ -160,6 +162,15 @@ export default () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lyricLines])
 
+  // 换样式后重新居中
+  useEffect(() => {
+    listLayoutInfoRef.current.lineHeights = []
+    requestAnimationFrame(() => {
+      handleScrollToActive(Math.max(lineRef.current.line, 0))
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [style.id])
+
   useEffect(() => {
     if (line < 0) return
     lineRef.current.prevLine = lineRef.current.line
@@ -208,6 +219,7 @@ export default () => {
   }, [])
 
   const renderItem: FlatListType['renderItem'] = ({ item, index }) => {
+    const hidden = style.visibleRange > 0 && Math.abs(index - line) > style.visibleRange
     return (
       <KaraokeLine
         line={item}
@@ -216,14 +228,23 @@ export default () => {
         nextTime={lyricLines[index + 1]?.time ?? item.time + 3000}
         onLayout={handleLineLayout}
         words={wordMap?.get(item.time)?.words}
+        fontScale={style.scale}
+        activeColor={theme.primary}
+        dimColor="rgba(255,255,255,0.42)"
+        dimOpacity={index === line ? 0.55 : style.dimOpacity}
+        align={style.align}
+        mirror={style.mirror}
+        hidden={hidden}
       />
     )
   }
   const getkey: FlatListType['keyExtractor'] = (item, index) => `${index}${item.text}`
 
   const spaceComponent = useMemo(() => (
-    <View style={styles.space} onLayout={handleSpaceLayout}></View>
-  ), [handleSpaceLayout])
+    // paddingTop 只接受 DimensionValue（number | `${number}%`），
+    // 这里是从样式配置里读的 string，所以需要 as any
+    <View style={{ paddingTop: (padTop ?? style.padTop) as any }} onLayout={handleSpaceLayout} />
+  ), [padTop, style.padTop, handleSpaceLayout])
 
   return (
     <>
@@ -231,14 +252,14 @@ export default () => {
         data={lyricLines}
         renderItem={renderItem}
         keyExtractor={getkey}
-        style={styles.container}
+        style={{ flex: 1, paddingLeft: (padH ?? style.padH) as any, paddingRight: (padH ?? style.padH) as any }}
         ref={flatListRef}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={spaceComponent}
         ListFooterComponent={spaceComponent}
         onScrollBeginDrag={handleScrollBeginDrag}
         onScrollEndDrag={onScrollEndDrag}
-        fadingEdgeLength={100}
+        fadingEdgeLength={180}
         initialNumToRender={Math.max(line + 10, 10)}
         onScrollToIndexFailed={handleScrollToIndexFailed}
         onScroll={handleScroll}
@@ -247,14 +268,3 @@ export default () => {
     </>
   )
 }
-
-const styles = createStyle({
-  container: {
-    flex: 1,
-    paddingLeft: 20,
-    paddingRight: 20,
-  },
-  space: {
-    paddingTop: '100%',
-  },
-})
