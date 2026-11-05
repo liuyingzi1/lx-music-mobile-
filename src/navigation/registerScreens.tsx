@@ -29,8 +29,8 @@ import SyncModeModal from './components/SyncModeModal'
 
 /**
  * ★ 新首页开关
- *   true  = 启动直接进新首页（底部导航 + 刷歌）
- *   false = 回到洛雪原来的首页
+ *   true  = 启动进新首页（底部导航 + 刷歌）
+ *   false = 回到洛雪原来的首页（自带搜索 / 设置 / 音源）
  * 改这一行 + 重新构建即可来回切换。
  */
 const USE_NEW_HOME = true
@@ -54,6 +54,9 @@ function WrappedComponent(Component: any) {
 export default () => {
   Navigation.registerComponent(HOME_SCREEN, () => WrappedComponent(USE_NEW_HOME ? Hub : Home))
   Navigation.registerComponent('Hub', () => WrappedComponent(Hub))
+  // 旧首页仍然注册着：新首页里的「搜索 / 我的 / 设置与音源」都会 push 到它，
+  // 所以自定义音源、音质、播放设置这些功能一个都不会丢。
+  Navigation.registerComponent('OldHome', () => WrappedComponent(Home))
   Navigation.registerComponent(PLAY_DETAIL_SCREEN, () => WrappedComponent(PlayDetail))
   Navigation.registerComponent(SONGLIST_DETAIL_SCREEN, () => WrappedComponent(SonglistDetail))
   Navigation.registerComponent(COMMENT_SCREEN, () => WrappedComponent(Comment))

@@ -1,4 +1,4 @@
-import { memo, useState } from 'react'
+import { memo, useCallback, useState } from 'react'
 import {
   ScrollView,
   StatusBar,
@@ -8,17 +8,15 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native'
+import { Navigation } from 'react-native-navigation'
 
 import Feed from './Feed'
 
 /**
  * 新首页壳：底部 3 个 Tab（首页 / 发现 / 我的）
  *
- * 说明：
- *   - 这是**独立屏幕**，不依赖洛雪原有的 Home / 抽屉 / Pager 结构，
- *     所以不会把现有功能改坏；确认好用它之后再设为启动页。
- *   - Tab 栏是自己画的 View，不是 react-native-navigation 的 bottomTabs，
- *     好处是零风险，坏处是每个 Tab 页要自己管滚动位置。
+ * 旧首页（搜索 / 设置 / 音源 / 歌单）没有删，只是被换成了启动页。
+ * 这里通过 Navigation.push('OldHome') 把它接回来，所以音源功能一个都不会丢。
  */
 
 const TABS = [
@@ -31,9 +29,19 @@ type TabKey = typeof TABS[number]['key']
 
 const TAB_BAR_HEIGHT = 58
 
-export default memo(() => {
+export default memo(({ componentId }: { componentId?: string }) => {
   const [tab, setTab] = useState<TabKey>('feed')
   const { width } = useWindowDimensions()
+
+  const openOldHome = useCallback(() => {
+    if (!componentId) {
+      console.warn('[Hub] componentId 缺失，无法打开旧版首页')
+      return
+    }
+    void Navigation.push(componentId, {
+      component: { name: 'OldHome' },
+    })
+  }, [componentId])
 
   return (
     <View style={styles.root}>
@@ -44,8 +52,17 @@ export default memo(() => {
           ? <Feed bottomInset={TAB_BAR_HEIGHT} />
           : tab === 'discover'
             ? <Discover width={width} />
-            : <Mine />}
+            : <Mine onOpen={openOldHome} />}
       </View>
+
+      {/* 搜索入口（只在首页显示） */}
+      {tab === 'feed'
+        ? (
+          <TouchableOpacity style={styles.searchBtn} activeOpacity={0.75} onPress={openOldHome}>
+            <Text style={styles.searchText}>搜索</Text>
+          </TouchableOpacity>
+          )
+        : null}
 
       <View style={[styles.tabBar, { height: TAB_BAR_HEIGHT }]}>
         {TABS.map(item => {
@@ -93,11 +110,32 @@ const Discover = ({ width }: { width: number }) => {
   )
 }
 
-const Mine = () => (
-  <View style={styles.mine}>
+const MINE_ITEMS = [
+  { title: '搜索', desc: '找歌 / 找歌单' },
+  { title: '我的歌单', desc: '自建歌单、收藏的歌单' },
+  { title: '我的喜欢', desc: '收藏的歌曲' },
+  { title: '播放历史', desc: '最近听过的歌' },
+  { title: '设置与音源', desc: '自定义源 / 音质 / 播放设置' },
+  { title: '旧版首页', desc: '洛雪原始界面（备用）' },
+]
+
+const Mine = ({ onOpen }: { onOpen: () => void }) => (
+  <ScrollView contentContainerStyle={styles.mine}>
     <Text style={styles.sectionTitle}>我的</Text>
-    <Text style={styles.tip}>这里之后放：我的歌单 / 播放历史 / 设置</Text>
-  </View>
+    {MINE_ITEMS.map(item => (
+      <TouchableOpacity key={item.title} style={styles.row} activeOpacity={0.7} onPress={onOpen}>
+        <View style={styles.rowLeft}>
+          <Text style={styles.rowTitle}>{item.title}</Text>
+          <Text style={styles.rowDesc}>{item.desc}</Text>
+        </View>
+        <Text style={styles.rowArrow}>›</Text>
+      </TouchableOpacity>
+    ))}
+    <Text style={styles.tip}>
+      目前这些入口都会跳到洛雪原界面，功能完整可用。{'\n'}
+      下一版会把「我的歌单 / 我的喜欢 / 播放历史 / 设置」拆成独立页面内嵌到这里。
+    </Text>
+  </ScrollView>
 )
 
 const styles = StyleSheet.create({
@@ -107,6 +145,21 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  searchBtn: {
+    position: 'absolute',
+    right: 16,
+    top: 44,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.42)',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  searchText: {
+    color: '#FFFFFF',
+    fontSize: 13,
   },
   tabBar: {
     flexDirection: 'row',
@@ -174,10 +227,35 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.28)',
     fontSize: 11,
     marginTop: 12,
+    lineHeight: 17,
   },
   mine: {
-    flex: 1,
     paddingTop: 64,
     paddingHorizontal: 16,
+    paddingBottom: 24,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+  },
+  rowLeft: {
+    flex: 1,
+  },
+  rowTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+  },
+  rowDesc: {
+    color: 'rgba(255,255,255,0.35)',
+    fontSize: 11,
+    marginTop: 3,
+  },
+  rowArrow: {
+    color: 'rgba(255,255,255,0.3)',
+    fontSize: 20,
   },
 })
